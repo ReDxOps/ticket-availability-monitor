@@ -2,7 +2,9 @@
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import logging
+import random
 import signal
 import sys
 from typing import List, Optional, Set
@@ -129,6 +131,23 @@ class TicketMonitor:
                         )
                         new_alerts += 1
 
+            elif adv.state == AvailabilityState.IN_CART:
+                # Proactive pre-alert if newly seen in cart or transitioned into cart
+                entered_cart = is_new or (prev_state != AvailabilityState.IN_CART.value)
+                if entered_cart:
+                    slot_15m = int(datetime.now(timezone.utc).timestamp() // 900)
+                    notif_type = f"CART_PREALERT_{adv.id}_{slot_15m}"
+                    is_duplicate = await self.db.is_notification_duplicate(adv.id, notif_type)
+                    if not is_duplicate:
+                        logger.info(f"PRE-ALERT! Advert #{adv.id} is IN_CART. Dispatching pre-alert...")
+                        sent = await self.notifier.send_cart_prealert(adv)
+                        if sent:
+                            await self.db.record_notification_sent(
+                                adv.id,
+                                adv.state.value,
+                                notif_type,
+                            )
+
         # Mark any previously active adverts that disappeared as SOLD_OUT
         active_db_adverts = await self.db.get_active_adverts(self.settings.seetickets_category_id)
         for adv in active_db_adverts:
@@ -150,7 +169,7 @@ class TicketMonitor:
         logger.info(
             f"Starting Ticket Availability Monitor for {self.settings.seetickets_category_name}..."
         )
-        logger.info(f"Poll interval: {self.settings.poll_interval_seconds}s")
+        logger.info(f"Poll interval: {self.settings.poll_interval_seconds}s (with anti-WAF jitter)")
         logger.info(f"Telegram configured: {self.notifier.is_configured}")
 
         while self._running:
@@ -161,12 +180,14 @@ class TicketMonitor:
                     logger.info("Cutoff date reached. Shutting down monitor loop.")
                     break
 
-                # Determine sleep duration: backoff if error, else poll_interval_seconds
+                # Determine sleep duration: backoff if error, else poll_interval_seconds with anti-WAF jitter
                 if result.state == AvailabilityState.UNKNOWN and self.client.backoff_delay > 0:
                     sleep_time = self.client.backoff_delay
                     logger.info(f"Backoff sleep for {sleep_time:.1f}s...")
                 else:
-                    sleep_time = float(self.settings.poll_interval_seconds)
+                    base_sleep = float(self.settings.poll_interval_seconds)
+                    jitter = random.uniform(-0.5, 0.5)
+                    sleep_time = max(3.5, base_sleep + jitter)
 
                 await asyncio.sleep(sleep_time)
 

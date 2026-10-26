@@ -53,6 +53,33 @@ async def test_send_availability_alert_single(notifier):
     assert "705901" in req_body
     assert "61.95" in req_body
     assert "BILLET DISPONIBLE" in req_body
+    assert "https://resell.seetickets.com/dreamnation2026/category/7897" in req_body
+    assert "advert=705901" in req_body
+    assert "reply_markup" not in req_body
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_cart_prealert(notifier):
+    telegram_url = "https://api.telegram.org/bottest_bot_token/sendMessage"
+    respx.post(telegram_url).respond(status_code=200, json={"ok": True})
+
+    advert = AdvertModel(
+        id=705910,
+        nb_available_tickets=0,
+        nb_cart_tickets=1,
+        min_price_cents=6195,
+    )
+
+    sent = await notifier.send_cart_prealert(advert)
+    assert sent is True
+    assert respx.calls.call_count == 1
+    req_body = respx.calls.last.request.content.decode()
+    assert "PRÉ-ALERTE" in req_body or "PR\\u00c9-ALERTE" in req_body
+    assert "705910" in req_body
+    assert "https://resell.seetickets.com/dreamnation2026/category/7897" in req_body
+    assert "advert=705910" in req_body
+    assert "reply_markup" not in req_body
 
 
 @pytest.mark.asyncio
