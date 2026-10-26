@@ -142,6 +142,21 @@ async def test_fetch_adverts_server_error_500(client, settings):
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_fetch_adverts_waf_403_cooldown(client, settings):
+    respx.get(settings.adverts_search_url).respond(
+        status_code=403,
+        text="Forbidden by WAF",
+    )
+
+    state, adverts, err = await client.fetch_adverts()
+    assert state == AvailabilityState.UNKNOWN
+    assert adverts == []
+    assert "403" in err
+    assert client.backoff_delay == 300.0
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_fetch_adverts_timeout(client, settings):
     respx.get(settings.adverts_search_url).mock(
         side_effect=httpx.ReadTimeout("Timeout connecting to server")

@@ -120,6 +120,18 @@ class SeeTicketsClient:
 
                 return overall_state, adverts, None
 
+            elif response.status_code == 403:
+                self.consecutive_errors += 1
+                self.backoff_delay = 300.0  # 5 minutes of silence required to clear WAF penalty
+                logger.warning(
+                    "WAF 403 Forbidden from See Tickets. Applying 300s (5min) cooldown to clear IP penalty."
+                )
+                return (
+                    AvailabilityState.UNKNOWN,
+                    [],
+                    "HTTP 403: WAF rate limit (300s cooldown applied)",
+                )
+
             elif response.status_code == 429:
                 retry_after = response.headers.get("Retry-After")
                 self._handle_error(429, retry_after)

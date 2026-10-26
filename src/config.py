@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # Polling & targets
     poll_interval_seconds: int = Field(
-        default=6,
+        default=10,
         description="Interval between polling cycles in seconds",
     )
     target_tickets_count: int = Field(
@@ -92,8 +92,8 @@ class Settings(BaseSettings):
     @field_validator("poll_interval_seconds")
     @classmethod
     def validate_poll_interval(cls, v: int) -> int:
-        if v < 4:
-            raise ValueError("poll_interval_seconds must be at least 4 to respect platform constraints")
+        if v < 5:
+            raise ValueError("poll_interval_seconds must be at least 5 to respect platform constraints")
         return v
 
     @property
