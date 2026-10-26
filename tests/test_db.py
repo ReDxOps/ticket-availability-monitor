@@ -111,3 +111,18 @@ async def test_mark_sold_out(db):
     # Verify state in DB
     state = await db.get_advert_state(705901)
     assert state["state"] == AvailabilityState.SOLD_OUT.value
+
+
+@pytest.mark.asyncio
+async def test_cart_duration_tracking(db):
+    advert = AdvertModel(id=705920, nb_available_tickets=1, nb_cart_tickets=1)
+    await db.record_advert_state(advert, category_id=7897)
+
+    duration = await db.get_cart_duration_seconds(705920)
+    assert duration is not None
+    assert duration >= 0.0
+
+    # Once released, duration should be None
+    advert_released = AdvertModel(id=705920, nb_available_tickets=1, nb_cart_tickets=0)
+    await db.record_advert_state(advert_released, category_id=7897)
+    assert await db.get_cart_duration_seconds(705920) is None

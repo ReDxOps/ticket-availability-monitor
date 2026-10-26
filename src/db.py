@@ -47,6 +47,7 @@ class DatabaseManager:
                 nb_available INTEGER NOT NULL,
                 nb_cart INTEGER NOT NULL,
                 price_cents INTEGER NOT NULL,
+                cart_entered_at TEXT,
                 first_seen_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -79,6 +80,11 @@ class DatabaseManager:
             ON notification_log (advert_id, notification_type);
             """
         )
+        # Migration for existing databases
+        try:
+            await conn.execute("ALTER TABLE advert_state ADD COLUMN cart_entered_at TEXT")
+        except Exception:
+            pass
         await conn.commit()
 
     async def get_advert_state(self, advert_id: int) -> Optional[Dict[str, Any]]:
@@ -92,6 +98,18 @@ class DatabaseManager:
             if row:
                 return dict(row)
         return None
+
+    async def get_cart_duration_seconds(self, advert_id: int) -> Optional[float]:
+        """Returns how many seconds an advert has been continuously in cart, or None if not in cart."""
+        existing = await self.get_advert_state(advert_id)
+        if not existing or not existing.get("cart_entered_at"):
+            return None
+        try:
+            entered_dt = datetime.fromisoformat(existing["cart_entered_at"])
+            now_dt = datetime.now(timezone.utc)
+            return max(0.0, (now_dt - entered_dt).total_seconds())
+        except Exception:
+            return None
 
     async def record_advert_state(
         self,
@@ -115,11 +133,12 @@ class DatabaseManager:
 
         if existing is None:
             # First time seeing this advert
+            cart_entered_at = now_iso if advert.state == AvailabilityState.IN_CART else None
             await conn.execute(
                 """
                 INSERT INTO advert_state (
-                    advert_id, category_id, state, nb_available, nb_cart, price_cents, first_seen_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    advert_id, category_id, state, nb_available, nb_cart, price_cents, cart_entered_at, first_seen_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     advert.id,
@@ -128,6 +147,7 @@ class DatabaseManager:
                     advert.nb_available_tickets,
                     advert.nb_cart_tickets,
                     advert.min_price_cents,
+                    cart_entered_at,
                     now_iso,
                     now_iso,
                 ),
@@ -160,6 +180,15 @@ class DatabaseManager:
             or existing["nb_cart"] != advert.nb_cart_tickets
         )
 
+        # Track when advert entered cart
+        if advert.state == AvailabilityState.IN_CART:
+            if prev_state != AvailabilityState.IN_CART.value or not existing.get("cart_entered_at"):
+                cart_entered_at = now_iso
+            else:
+                cart_entered_at = existing.get("cart_entered_at")
+        else:
+            cart_entered_at = None
+
         await conn.execute(
             """
             UPDATE advert_state SET
@@ -167,6 +196,7 @@ class DatabaseManager:
                 nb_available = ?,
                 nb_cart = ?,
                 price_cents = ?,
+                cart_entered_at = ?,
                 updated_at = ?
             WHERE advert_id = ?
             """,
@@ -175,6 +205,7 @@ class DatabaseManager:
                 advert.nb_available_tickets,
                 advert.nb_cart_tickets,
                 advert.min_price_cents,
+                cart_entered_at,
                 now_iso,
                 advert.id,
             ),

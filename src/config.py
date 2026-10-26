@@ -58,6 +58,10 @@ class Settings(BaseSettings):
         default=10,
         description="Consecutive failure count before sending a technical alert",
     )
+    cart_expiration_alert_delay_seconds: int = Field(
+        default=540,
+        description="Seconds an advert must be held in cart before sending imminent expiration alert (default 540s = 9 min)",
+    )
 
     # Cutoff date
     cutoff_date: str = Field(

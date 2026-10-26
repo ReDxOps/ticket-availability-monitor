@@ -132,15 +132,26 @@ class TicketMonitor:
                         new_alerts += 1
 
             elif adv.state == AvailabilityState.IN_CART:
-                # Proactive pre-alert if newly seen in cart or transitioned into cart
-                entered_cart = is_new or (prev_state != AvailabilityState.IN_CART.value)
-                if entered_cart:
-                    slot_15m = int(datetime.now(timezone.utc).timestamp() // 900)
-                    notif_type = f"CART_PREALERT_{adv.id}_{slot_15m}"
+                # Check how long this advert has been continuously held in cart
+                duration_sec = await self.db.get_cart_duration_seconds(adv.id)
+                # Alert when held for ~9 minutes without purchase (threshold in settings)
+                if (
+                    duration_sec is not None
+                    and duration_sec >= self.settings.cart_expiration_alert_delay_seconds
+                ):
+                    advert_row = await self.db.get_advert_state(adv.id)
+                    entered_str = advert_row.get("cart_entered_at") if advert_row else ""
+                    notif_type = f"IMMINENT_EXPIRATION_{adv.id}_{entered_str}"
                     is_duplicate = await self.db.is_notification_duplicate(adv.id, notif_type)
                     if not is_duplicate:
-                        logger.info(f"PRE-ALERT! Advert #{adv.id} is IN_CART. Dispatching pre-alert...")
-                        sent = await self.notifier.send_cart_prealert(adv)
+                        logger.info(
+                            f"IMMINENT EXPIRATION! Advert #{adv.id} has been in cart for {duration_sec:.0f}s. Dispatching sniper alert..."
+                        )
+                        minutes_in_cart = max(1, int(round(duration_sec / 60.0)))
+                        sent = await self.notifier.send_imminent_expiration_alert(
+                            adv,
+                            minutes_in_cart=minutes_in_cart,
+                        )
                         if sent:
                             await self.db.record_notification_sent(
                                 adv.id,

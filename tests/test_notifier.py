@@ -60,7 +60,7 @@ async def test_send_availability_alert_single(notifier):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_send_cart_prealert(notifier):
+async def test_send_imminent_expiration_alert(notifier):
     telegram_url = "https://api.telegram.org/bottest_bot_token/sendMessage"
     respx.post(telegram_url).respond(status_code=200, json={"ok": True})
 
@@ -71,12 +71,13 @@ async def test_send_cart_prealert(notifier):
         min_price_cents=6195,
     )
 
-    sent = await notifier.send_cart_prealert(advert)
+    sent = await notifier.send_imminent_expiration_alert(advert, minutes_in_cart=9)
     assert sent is True
     assert respx.calls.call_count == 1
     req_body = respx.calls.last.request.content.decode()
-    assert "PRÉ-ALERTE" in req_body or "PR\\u00c9-ALERTE" in req_body
+    assert "EXPIRATION IMMINENTE" in req_body or "EXPIRATION" in req_body
     assert "705910" in req_body
+    assert "9 minutes" in req_body
     assert "https://resell.seetickets.com/dreamnation2026/category/7897" in req_body
     assert "advert=705910" in req_body
     assert "reply_markup" not in req_body

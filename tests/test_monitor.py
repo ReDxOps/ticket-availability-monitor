@@ -151,3 +151,52 @@ async def test_monitor_cycle_prolonged_errors_trigger_technical_alert(monitor):
     assert res3.state == AvailabilityState.UNKNOWN
     assert telegram_route.call_count == 1
     assert "ALERTE TECHNIQUE" in telegram_route.calls.last.request.content.decode()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_monitor_cycle_imminent_expiration_alert(monitor):
+    from datetime import datetime, timezone, timedelta
+    telegram_url = "https://api.telegram.org/bottest_token/sendMessage"
+    telegram_route = respx.post(telegram_url).respond(status_code=200, json={"ok": True})
+
+    search_route = respx.get(monitor.settings.adverts_search_url)
+    search_route.respond(
+        status_code=200,
+        json={
+            "hydra:member": [
+                {
+                    "id": 705999,
+                    "nbAvailableTickets": 1,
+                    "nbCartTickets": 1,
+                    "minPrice": 6500,
+                    "tickets": [],
+                }
+            ],
+            "hydra:totalItems": 1,
+        },
+    )
+
+    # 1. First cycle: advert enters cart -> 0 alert (too early)
+    res1 = await monitor.poll_once()
+    assert res1.state == AvailabilityState.IN_CART
+    assert telegram_route.call_count == 0
+
+    # 2. Simulate 9.5 minutes elapsed
+    conn = await monitor.db._get_conn()
+    ten_min_ago = (datetime.now(timezone.utc) - timedelta(minutes=9, seconds=30)).isoformat()
+    await conn.execute(
+        "UPDATE advert_state SET cart_entered_at = ? WHERE advert_id = 705999",
+        (ten_min_ago,),
+    )
+    await conn.commit()
+
+    # 3. Next cycle: triggers the imminent expiration alert!
+    res2 = await monitor.poll_once()
+    assert res2.state == AvailabilityState.IN_CART
+    assert telegram_route.call_count == 1
+    assert "EXPIRATION IMMINENTE" in telegram_route.calls.last.request.content.decode()
+
+    # 4. Third cycle: deduplication prevents re-alerting
+    res3 = await monitor.poll_once()
+    assert telegram_route.call_count == 1

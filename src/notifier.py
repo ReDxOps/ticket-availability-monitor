@@ -103,32 +103,33 @@ class TelegramNotifier:
 
         return await self._send_message(message)
 
-    async def send_cart_prealert(self, advert: AdvertModel) -> bool:
+    async def send_imminent_expiration_alert(
+        self,
+        advert: AdvertModel,
+        minutes_in_cart: int = 9,
+    ) -> bool:
         """
-        Sends a proactive pre-alert when tickets enter someone else's cart.
-        Gives the user advance notice and raw direct link before cart expiration.
+        Sends an alert when a ticket has been held in cart for ~9 minutes.
+        Warns the user to open Safari and be ready to claim at the ~10-minute expiration mark.
         """
         direct_url = self.settings.get_advert_url(advert.id)
-        now_dt = datetime.now(self._paris_tz)
-        detection_time = now_dt.strftime("%H:%M:%S")
-        rel_10m = (now_dt + timedelta(minutes=10)).strftime("%H:%M")
-        rel_15m = (now_dt + timedelta(minutes=15)).strftime("%H:%M")
+        now_time = self._now_paris()
         count = advert.nb_cart_tickets or 1
         price_str = f"{advert.price_eur:.2f} €" if advert.price_eur > 0 else "Non communiqué"
 
         message = (
-            f"⏳ <b>PRÉ-ALERTE : BILLET EN COURS DE RÉSERVATION (EN PANIER)</b>\n\n"
+            f"🎯 <b>EXPIRATION IMMINENTE DU PANIER (~60 SECONDES) !</b>\n\n"
             f"🎪 <b>Événement :</b> Dream Nation 2026\n"
+            f"📅 <b>Date :</b> Vendredi 30 Octobre 2026 (20h30)\n"
             f"🎫 <b>Catégorie :</b> {self.settings.seetickets_category_name}\n"
-            f"🔢 <b>Quantité bloquée :</b> {count} billet(s)\n"
-            f"💰 <b>Prix unitaire :</b> {price_str}\n"
-            f"🕒 <b>Mis en panier vers :</b> {detection_time} (Paris)\n\n"
-            f"⚠️ <i>Un acheteur a ce billet dans son panier, mais plus de 50% des paniers expirent sans être payés !</i>\n\n"
-            f"🎯 <b>Fenêtre estimée de libération si abandonné :</b>\n"
-            f"👉 <b>Entre {rel_10m} et {rel_15m}</b>\n\n"
+            f"🔢 <b>Quantité en cours de libération :</b> {count} billet(s)\n"
+            f"💰 <b>Prix unitaire constaté :</b> {price_str}\n"
+            f"🕒 <b>En panier depuis :</b> ~{minutes_in_cart} minutes ({now_time})\n\n"
+            f"⚡ <b>L'ACHETEUR N'A TOUJOURS PAS VALIDÉ SON ACHAT !</b>\n"
+            f"<i>Le panier expire dans environ 1 minute. Le billet va être relâché d'une seconde à l'autre !</i>\n\n"
             f"👉 <b>Accès direct à l'annonce #{advert.id} :</b>\n"
             f"{direct_url}\n\n"
-            f"💡 <i>Conseil : Ouvre la page dès maintenant pour être prêt à rafraîchir à la seconde de fin de panier !</i>"
+            f"💡 <i>Conseil : Ouvre le lien MAINTENANT et rafraîchis en continu pour cliquer dès la libération !</i>"
         )
 
         return await self._send_message(message)
