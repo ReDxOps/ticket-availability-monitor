@@ -210,6 +210,10 @@ class TicketMonitor:
         )
         logger.info(f"Poll interval: {self.settings.poll_interval_seconds}s (with anti-WAF jitter)")
         logger.info(f"Telegram configured: {self.notifier.is_configured}")
+        logger.info(
+            f"Auto-cart configured: {bool(self.settings.seetickets_session_cookie)} "
+            f"({'Cookie actif' if self.settings.seetickets_session_cookie else 'Désactivé'})"
+        )
 
         while self._running:
             try:
