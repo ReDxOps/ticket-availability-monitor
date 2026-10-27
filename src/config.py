@@ -79,6 +79,12 @@ class Settings(BaseSettings):
         description="Telegram Chat ID for notification delivery",
     )
 
+    # Auto-cart configuration
+    seetickets_session_cookie: Optional[str] = Field(
+        default=None,
+        description="See Tickets resale session cookie for automated cart reservation",
+    )
+
     # Storage and logging
     db_path: str = Field(
         default="data/monitor.db",
@@ -124,6 +130,16 @@ class Settings(BaseSettings):
     def categories_url(self) -> str:
         """Endpoint URL for polling overall categories for the event."""
         return f"{self.seetickets_base_url.rstrip('/')}/api/categories?event={self.seetickets_event_id}"
+
+    @property
+    def cart_url(self) -> str:
+        """Constructs verified cart URL on See Tickets Resell."""
+        return f"{self.seetickets_base_url.rstrip('/')}/{self.seetickets_site_name}/cart"
+
+    @property
+    def cart_add_url(self) -> str:
+        """Endpoint URL for reserving an advert in user's cart."""
+        return f"{self.seetickets_base_url.rstrip('/')}/{self.seetickets_site_name}/cart/add"
 
     def is_cutoff_reached(self) -> bool:
         """Returns True if the current time has surpassed the configured cutoff date."""

@@ -105,31 +105,59 @@ class TicketMonitor:
             # Check if this advert is purchasable right now
             if adv.is_purchasable:
                 count = adv.truly_available_count
-                if is_cart_return:
-                    notif_type = f"CART_RETURN_{adv.id}_{count}"
-                elif adv.has_multiple_tickets:
-                    notif_type = f"AVAIL_2PLUS_{adv.id}_{count}"
-                else:
-                    notif_type = f"AVAIL_{adv.id}_{count}"
+                cart_success = False
 
-                # Deduplication check
-                is_duplicate = await self.db.is_notification_duplicate(adv.id, notif_type)
-                if not is_duplicate:
-                    logger.info(
-                        f"ALERT! Purchasable ticket(s) found! Advert #{adv.id}, "
-                        f"Count={count}, CartReturn={is_cart_return}"
-                    )
-                    sent = await self.notifier.send_availability_alert(
-                        adv,
-                        is_cart_return=is_cart_return,
-                    )
-                    if sent:
-                        await self.db.record_notification_sent(
-                            adv.id,
-                            adv.state.value,
-                            notif_type,
+                # 1. Attempt auto-cart if session cookie is configured
+                if self.settings.seetickets_session_cookie:
+                    logger.info(f"Attempting auto-cart for advert #{adv.id}...")
+                    cart_success, cart_msg = await self.client.add_to_cart(adv.id)
+                    if cart_success:
+                        logger.info(f"Auto-cart SUCCESS for advert #{adv.id}!")
+                    else:
+                        logger.warning(
+                            f"Auto-cart failed for advert #{adv.id}: {cart_msg}. Falling back to standard alert."
                         )
-                        new_alerts += 1
+
+                # 2. Dispatch appropriate notification
+                if cart_success:
+                    notif_type = f"AUTO_CART_SUCCESS_{adv.id}"
+                    is_duplicate = await self.db.is_notification_duplicate(adv.id, notif_type)
+                    if not is_duplicate:
+                        logger.info(f"ALERT! Ticket locked in cart! Advert #{adv.id}")
+                        sent = await self.notifier.send_auto_cart_success_alert(adv)
+                        if sent:
+                            await self.db.record_notification_sent(
+                                adv.id,
+                                adv.state.value,
+                                notif_type,
+                            )
+                            new_alerts += 1
+                else:
+                    if is_cart_return:
+                        notif_type = f"CART_RETURN_{adv.id}_{count}"
+                    elif adv.has_multiple_tickets:
+                        notif_type = f"AVAIL_2PLUS_{adv.id}_{count}"
+                    else:
+                        notif_type = f"AVAIL_{adv.id}_{count}"
+
+                    # Deduplication check
+                    is_duplicate = await self.db.is_notification_duplicate(adv.id, notif_type)
+                    if not is_duplicate:
+                        logger.info(
+                            f"ALERT! Purchasable ticket(s) found! Advert #{adv.id}, "
+                            f"Count={count}, CartReturn={is_cart_return}"
+                        )
+                        sent = await self.notifier.send_availability_alert(
+                            adv,
+                            is_cart_return=is_cart_return,
+                        )
+                        if sent:
+                            await self.db.record_notification_sent(
+                                adv.id,
+                                adv.state.value,
+                                notif_type,
+                            )
+                            new_alerts += 1
 
             elif adv.state == AvailabilityState.IN_CART:
                 # Check how long this advert has been continuously held in cart

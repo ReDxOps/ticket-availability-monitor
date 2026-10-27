@@ -200,3 +200,82 @@ async def test_monitor_cycle_imminent_expiration_alert(monitor):
     # 4. Third cycle: deduplication prevents re-alerting
     res3 = await monitor.poll_once()
     assert telegram_route.call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_monitor_cycle_auto_cart_success(monitor):
+    telegram_url = "https://api.telegram.org/bottest_token/sendMessage"
+    telegram_route = respx.post(telegram_url).respond(status_code=200, json={"ok": True})
+
+    # Enable auto-cart session cookie
+    monitor.settings.seetickets_session_cookie = "resale=secret_cookie_123"
+
+    respx.get(monitor.settings.adverts_search_url).respond(
+        status_code=200,
+        json={
+            "hydra:member": [
+                {
+                    "id": 888111,
+                    "nbAvailableTickets": 1,
+                    "nbCartTickets": 0,
+                    "minPrice": 6195,
+                    "tickets": [{"id": 888111, "resaleValue": 5900, "purchaseFees": 295}],
+                }
+            ],
+            "hydra:totalItems": 1,
+        },
+    )
+
+    # Mock auto-cart endpoint
+    cart_route = respx.post(monitor.settings.cart_add_url).respond(
+        status_code=200,
+        json={"advert": {"id": 888111}, "nbItem": 1},
+    )
+
+    res = await monitor.poll_once()
+    assert res.state == AvailabilityState.AVAILABLE
+    assert res.new_alerts == 1
+    assert cart_route.call_count == 1
+    assert telegram_route.call_count == 1
+    assert "BILLET SÉCURISÉ DANS VOTRE PANIER" in telegram_route.calls.last.request.content.decode()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_monitor_cycle_auto_cart_fallback(monitor):
+    telegram_url = "https://api.telegram.org/bottest_token/sendMessage"
+    telegram_route = respx.post(telegram_url).respond(status_code=200, json={"ok": True})
+
+    monitor.settings.seetickets_session_cookie = "resale=expired_cookie"
+
+    respx.get(monitor.settings.adverts_search_url).respond(
+        status_code=200,
+        json={
+            "hydra:member": [
+                {
+                    "id": 888222,
+                    "nbAvailableTickets": 1,
+                    "nbCartTickets": 0,
+                    "minPrice": 6195,
+                    "tickets": [{"id": 888222, "resaleValue": 5900, "purchaseFees": 295}],
+                }
+            ],
+            "hydra:totalItems": 1,
+        },
+    )
+
+    # Mock auto-cart failure (e.g. captcha_error)
+    cart_route = respx.post(monitor.settings.cart_add_url).respond(
+        status_code=200,
+        json={"error": "captcha_error"},
+    )
+
+    res = await monitor.poll_once()
+    assert res.state == AvailabilityState.AVAILABLE
+    assert res.new_alerts == 1
+    assert cart_route.call_count == 1
+    assert telegram_route.call_count == 1
+    # Fallback to standard alert
+    assert "BILLET DISPONIBLE" in telegram_route.calls.last.request.content.decode()
+

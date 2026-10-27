@@ -103,6 +103,29 @@ class TelegramNotifier:
 
         return await self._send_message(message)
 
+    async def send_auto_cart_success_alert(self, advert: AdvertModel) -> bool:
+        """Sends an urgent success alert when a ticket was automatically added to user's cart."""
+        cart_url = self.settings.cart_url
+        now_time = self._now_paris()
+        count = advert.truly_available_count or 1
+        price_str = f"{advert.price_eur:.2f} €" if advert.price_eur > 0 else "Non communiqué"
+
+        message = (
+            f"🎪 <b>Dream Nation 2026</b> — <i>Vendredi 30 Octobre 2026</i>\n\n"
+            f"🎉🚨 <b>BILLET SÉCURISÉ DANS VOTRE PANIER !</b>\n\n"
+            f"✅ Le bot a automatiquement ajouté le billet à votre compte See Tickets !\n\n"
+            f"🎫 <b>Catégorie :</b> {self.settings.seetickets_category_name}\n"
+            f"🔢 <b>Quantité :</b> {count} billet(s)\n"
+            f"💰 <b>Prix unitaire :</b> {price_str}\n"
+            f"🕒 <b>Verrouillé à :</b> {now_time} (Paris)\n\n"
+            f"⏱️ <b>ATTENTION :</b> Vous avez environ <b>10 à 15 minutes</b> pour valider et payer votre commande !\n\n"
+            f"👉 <b>Accéder directement à mon panier pour payer :</b>\n"
+            f"{cart_url}\n\n"
+            f"⚡ <i>Connectez-vous avec votre compte si nécessaire et finalisez votre paiement rapidement.</i>"
+        )
+
+        return await self._send_message(message)
+
     async def send_imminent_expiration_alert(
         self,
         advert: AdvertModel,

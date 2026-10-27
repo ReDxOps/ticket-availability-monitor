@@ -201,3 +201,45 @@ class SeeTicketsClient:
             logger.warning(f"Failed to fetch category overview: {ex}")
 
         return {}
+
+    async def add_to_cart(self, advert_id: int) -> tuple[bool, Optional[str]]:
+        """Attempts to add an advert to user's cart on See Tickets Resell.
+
+        Returns:
+            Tuple of (success: bool, message_or_error: Optional[str])
+        """
+        if not self.settings.seetickets_session_cookie:
+            return False, "No session cookie configured"
+
+        cookie_value = self.settings.seetickets_session_cookie.strip()
+        if cookie_value.startswith("resale="):
+            cookie_value = cookie_value.split("resale=", 1)[1].split(";", 1)[0]
+
+        headers = {
+            "Accept": "application/ld+json",
+            "Content-Type": "application/json",
+            "Cookie": f"resale={cookie_value}",
+            "Origin": self.settings.seetickets_base_url,
+            "Referer": self.settings.category_url,
+        }
+        payload = {"id": advert_id, "captcha": None}
+
+        try:
+            response = await self._client.post(
+                self.settings.cart_add_url,
+                json=payload,
+                headers=headers,
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("advert") is not None or data.get("nbItem", 0) > 0:
+                    return True, "Added to cart successfully"
+                error = data.get("error", "Unknown error adding to cart")
+                return False, error
+
+            return False, f"HTTP {response.status_code}: {response.text[:100]}"
+
+        except Exception as ex:
+            logger.error(f"Error adding advert #{advert_id} to cart: {ex}")
+            return False, str(ex)

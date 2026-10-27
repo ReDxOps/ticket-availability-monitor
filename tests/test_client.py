@@ -184,3 +184,58 @@ async def test_fetch_category_overview(client, settings):
 
     overview = await client.fetch_category_overview()
     assert overview == {7897: 0, 7898: 40}
+
+
+@pytest.mark.asyncio
+async def test_add_to_cart_no_cookie(client):
+    success, msg = await client.add_to_cart(705901)
+    assert success is False
+    assert "No session cookie" in msg
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_add_to_cart_success(settings):
+    settings.seetickets_session_cookie = "resale=test_cookie_123"
+    c = SeeTicketsClient(settings)
+    respx.post(settings.cart_add_url).respond(
+        status_code=200,
+        json={"advert": {"id": 705901}, "nbItem": 1, "success": "Ticket ajouté"},
+    )
+
+    success, msg = await c.add_to_cart(705901)
+    assert success is True
+    assert "Added to cart" in msg
+    await c.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_add_to_cart_captcha_error(settings):
+    settings.seetickets_session_cookie = "test_cookie_456"
+    c = SeeTicketsClient(settings)
+    respx.post(settings.cart_add_url).respond(
+        status_code=200,
+        json={"error": "captcha_error"},
+    )
+
+    success, msg = await c.add_to_cart(705901)
+    assert success is False
+    assert msg == "captcha_error"
+    await c.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_add_to_cart_http_error(settings):
+    settings.seetickets_session_cookie = "test_cookie_789"
+    c = SeeTicketsClient(settings)
+    respx.post(settings.cart_add_url).respond(
+        status_code=500,
+        text="Internal Server Error",
+    )
+
+    success, msg = await c.add_to_cart(705901)
+    assert success is False
+    assert "HTTP 500" in msg
+    await c.close()

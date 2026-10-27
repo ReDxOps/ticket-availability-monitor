@@ -149,3 +149,25 @@ async def test_notifier_without_credentials():
     sent = await n.send_availability_alert(advert)
     assert sent is False
     await n.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_auto_cart_success_alert(notifier):
+    telegram_url = "https://api.telegram.org/bottest_bot_token/sendMessage"
+    respx.post(telegram_url).respond(status_code=200, json={"ok": True})
+
+    advert = AdvertModel(
+        id=705999,
+        nb_available_tickets=1,
+        nb_cart_tickets=0,
+        min_price_cents=6195,
+    )
+
+    sent = await notifier.send_auto_cart_success_alert(advert)
+    assert sent is True
+
+    req_body = respx.calls.last.request.content.decode()
+    assert "BILLET SÉCURISÉ DANS VOTRE PANIER" in req_body
+    assert "https://resell.seetickets.com/dreamnation2026/cart" in req_body
+    assert "10 à 15 minutes" in req_body
