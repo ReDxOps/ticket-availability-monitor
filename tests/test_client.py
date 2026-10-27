@@ -239,3 +239,45 @@ async def test_add_to_cart_http_error(settings):
     assert success is False
     assert "HTTP 500" in msg
     await c.close()
+
+
+@pytest.mark.asyncio
+async def test_verify_session_no_cookie(client):
+    is_valid, msg = await client.verify_session()
+    assert is_valid is False
+    assert "No session cookie" in msg
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_session_valid(settings):
+    settings.seetickets_session_cookie = "resale=valid_123"
+    c = SeeTicketsClient(settings)
+    site_url = f"{settings.seetickets_base_url.rstrip('/')}/{settings.seetickets_site_name}/"
+    respx.get(site_url).respond(
+        status_code=200,
+        text="<html><script>let globalParams = { currentUser: '544653' };</script></html>",
+    )
+
+    is_valid, user_id = await c.verify_session()
+    assert is_valid is True
+    assert user_id == "544653"
+    await c.close()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_verify_session_expired(settings):
+    settings.seetickets_session_cookie = "resale=expired_123"
+    c = SeeTicketsClient(settings)
+    site_url = f"{settings.seetickets_base_url.rstrip('/')}/{settings.seetickets_site_name}/"
+    respx.get(site_url).respond(
+        status_code=200,
+        text="<html><script>let globalParams = { currentUser: '' };</script></html>",
+    )
+
+    is_valid, msg = await c.verify_session()
+    assert is_valid is False
+    assert "invalid or expired" in msg
+    await c.close()
+

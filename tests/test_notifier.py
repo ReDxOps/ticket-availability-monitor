@@ -171,3 +171,18 @@ async def test_send_auto_cart_success_alert(notifier):
     assert "BILLET SÉCURISÉ DANS VOTRE PANIER" in req_body
     assert "https://resell.seetickets.com/dreamnation2026/cart" in req_body
     assert "10 à 15 minutes" in req_body
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_send_session_expired_alert(notifier):
+    telegram_url = "https://api.telegram.org/bottest_bot_token/sendMessage"
+    respx.post(telegram_url).respond(status_code=200, json={"ok": True})
+
+    sent = await notifier.send_session_expired_alert("Session expirée (déconnecté)")
+    assert sent is True
+
+    req_body = respx.calls.last.request.content.decode()
+    assert "SESSION SEE TICKETS EXPIRÉE" in req_body
+    assert "SEETICKETS_SESSION_COOKIE" in req_body
+

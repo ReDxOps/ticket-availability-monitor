@@ -215,6 +215,17 @@ class TicketMonitor:
             f"({'Cookie actif' if self.settings.seetickets_session_cookie else 'Désactivé'})"
         )
 
+        # Verify session validity at startup if configured
+        if self.settings.seetickets_session_cookie:
+            is_valid, user_info = await self.client.verify_session()
+            if is_valid:
+                logger.info(f"✅ Session See Tickets validée ! Connecté sous le compte #{user_info}")
+            else:
+                logger.warning(
+                    f"⚠️ ATTENTION : Session See Tickets expirée ou invalide ({user_info}) ! L'auto-cart sera inopérant."
+                )
+                await self.notifier.send_session_expired_alert(user_info or "Session expirée")
+
         while self._running:
             try:
                 result = await self.poll_once()

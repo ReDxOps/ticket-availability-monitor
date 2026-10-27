@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from typing import Dict, List, Optional, Tuple
 import httpx
 
@@ -242,4 +243,39 @@ class SeeTicketsClient:
 
         except Exception as ex:
             logger.error(f"Error adding advert #{advert_id} to cart: {ex}")
+            return False, str(ex)
+
+    async def verify_session(self) -> tuple[bool, Optional[str]]:
+        """Verifies if the configured session cookie is valid and connected to a user account.
+
+        Returns:
+            Tuple of (is_valid: bool, user_id_or_error: Optional[str])
+        """
+        if not self.settings.seetickets_session_cookie:
+            return False, "No session cookie configured"
+
+        cookie_value = self.settings.seetickets_session_cookie.strip()
+        if cookie_value.startswith("resale="):
+            cookie_value = cookie_value.split("resale=", 1)[1].split(";", 1)[0]
+
+        url = f"{self.settings.seetickets_base_url.rstrip('/')}/{self.settings.seetickets_site_name}/"
+        headers = {
+            "Cookie": f"resale={cookie_value}",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+
+        try:
+            response = await self._client.get(url, headers=headers)
+            if response.status_code == 200:
+                html = response.text
+                match = re.search(r'currentUser:\s*[\'"]([^\'"]*)[\'"]', html)
+                if match and match.group(1).strip():
+                    user_id = match.group(1).strip()
+                    return True, user_id
+                return False, "Session cookie is invalid or expired (not logged in)"
+
+            return False, f"HTTP {response.status_code}"
+
+        except Exception as ex:
+            logger.error(f"Error verifying See Tickets session: {ex}")
             return False, str(ex)

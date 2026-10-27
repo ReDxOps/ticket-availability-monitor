@@ -171,17 +171,21 @@ class TelegramNotifier:
         )
         return await self._send_message(message)
 
-    async def send_test_message(self) -> bool:
-        """Sends a verification test message to ensure bot credentials are functional."""
+    async def send_session_expired_alert(self, reason: str) -> bool:
+        """Sends an operational warning when the See Tickets session cookie has expired."""
         now_time = self._now_paris()
         message = (
-            f"🤖 <b>Test de Notification — Dream Nation 2026 Monitor</b>\n\n"
-            f"✅ Le bot Telegram est correctement configuré et prêt à vous alerter !\n"
-            f"🎯 <b>Cible surveillée :</b> PASS 1 JOUR VENDREDI\n"
-            f"⏱️ <b>Intervalle :</b> {self.settings.poll_interval_seconds}s (avec jitter anti-détection)\n"
-            f"🕒 <b>Test effectué le :</b> {now_time} (Paris)\n\n"
-            f"🔗 <b>Billetterie officielle See Tickets Resell :</b>\n"
-            f"{self.settings.category_url}"
+            f"⚠️ <b>SESSION SEE TICKETS EXPIRÉE</b>\n\n"
+            f"ℹ️ Le bot a testé votre session See Tickets au démarrage :\n"
+            f"❌ <b>Statut :</b> Déconnecté ({reason})\n"
+            f"🕒 <b>Heure :</b> {now_time} (Paris)\n\n"
+            f"🛡️ <b>Impact :</b>\n"
+            f"La surveillance des billets continue et vous recevrez toujours les alertes classiques, "
+            f"mais l'<b>Auto-Cart est temporairement inactif</b>.\n\n"
+            f"💡 <b>Pour réactiver l'Auto-Cart :</b>\n"
+            f"1. Connectez-vous sur https://resell.seetickets.com\n"
+            f"2. Récupérez la nouvelle valeur du cookie <code>resale</code> (F12 > Application)\n"
+            f"3. Mettez à jour <code>SEETICKETS_SESSION_COOKIE</code> dans votre <code>.env</code>"
         )
         return await self._send_message(message)
 
